@@ -1,0 +1,178 @@
+---
+# roles/ansible-zabbix-agent/tasks/RedHat.yml
+# Installation tasks for RHEL, CentOS, AlmaLinux, Rocky Linux
+# Supports both RHEL 7 (yum + Zabbix 6.0) and RHEL 8/9 (dnf + Zabbix 7.0)
+
+- name: Check for existing Zabbix packages
+  ansible.builtin.shell: rpm -qa | grep -i zabbix || true
+  register: existing_zabbix
+  changed_when: false
+
+- name: Display existing Zabbix packages (if any)
+  ansible.builtin.debug:
+    msg: "Found existing Zabbix packages: {{ existing_zabbix.stdout_lines }}"
+  when: existing_zabbix.stdout | length > 0
+
+# =============================================================================
+# EPEL EXCLUSION - Prevent update conflicts on all RHEL versions
+# =============================================================================
+
+- name: Check if EPEL repo exists
+  ansible.builtin.stat:
+    path: /etc/yum.repos.d/epel.repo
+  register: epel_repo
+
+- name: Exclude Zabbix packages from EPEL to prevent update conflicts
+  ansible.builtin.lineinfile:
+    path: /etc/yum.repos.d/epel.repo
+    regexp: '^excludepkgs=.*zabbix.*'
+    line: 'excludepkgs=zabbix*'
+    insertafter: '^\[epel\]'
+    state: present
+  when: epel_repo.stat.exists
+  ignore_errors: true
+
+# =============================================================================
+# RHEL/CentOS 7 - Use YUM + Zabbix 6.0 (last version supporting EL7)
+# =============================================================================
+
+- name: Remove existing Zabbix packages (RHEL 7)
+  ansible.builtin.yum:
+    name: "{{ item }}"
+    state: absent
+  loop: "{{ existing_zabbix.stdout_lines }}"
+  when:
+    - existing_zabbix.stdout | length > 0
+    - ansible_distribution_major_version == '7'
+  ignore_errors: true
+
+- name: Clean YUM cache after removal (RHEL 7)
+  ansible.builtin.command: yum clean all
+  when:
+    - existing_zabbix.stdout | length > 0
+    - ansible_distribution_major_version == '7'
+  changed_when: true
+
+- name: Add Zabbix 6.0 repository (RHEL 7)
+  ansible.builtin.yum:
+    name: "{{ zabbix_repo_url_rhel7 }}"
+    state: present
+    disable_gpg_check: true
+  register: zabbix_repo_yum
+  ignore_errors: true
+  when: ansible_distribution_major_version == '7'
+
+- name: Add Zabbix 6.0 repository via RPM fallback (RHEL 7)
+  ansible.builtin.command: rpm -Uvh {{ zabbix_repo_url_rhel7 }}
+  args:
+    creates: /etc/yum.repos.d/zabbix.repo
+  when:
+    - ansible_distribution_major_version == '7'
+    - zabbix_repo_yum.failed | default(false)
+
+- name: Install Zabbix agent packages (RHEL 7)
+  ansible.builtin.yum:
+    name: "{{ zabbix_agent_packages }}"
+    state: present
+    disablerepo: "epel,epel-*"
+  register: zabbix_install_yum
+  ignore_errors: true
+  when: ansible_distribution_major_version == '7'
+
+- name: Install Zabbix agent packages via shell fallback (RHEL 7)
+  ansible.builtin.shell: yum install -y --disablerepo=epel zabbix-agent zabbix-sender zabbix-get
+  when:
+    - ansible_distribution_major_version == '7'
+    - zabbix_install_yum.failed | default(false)
+
+# =============================================================================
+# RHEL/CentOS 8 - Use DNF + Zabbix 7.0
+# =============================================================================
+
+- name: Remove existing Zabbix packages (RHEL 8)
+  ansible.builtin.dnf:
+    name: "{{ item }}"
+    state: absent
+  loop: "{{ existing_zabbix.stdout_lines }}"
+  when:
+    - existing_zabbix.stdout | length > 0
+    - ansible_distribution_major_version == '8'
+
+- name: Clean DNF cache after removal (RHEL 8)
+  ansible.builtin.command: dnf clean all
+  when:
+    - existing_zabbix.stdout | length > 0
+    - ansible_distribution_major_version == '8'
+  changed_when: true
+
+- name: Add Zabbix 7.0 repository (RHEL 8)
+  ansible.builtin.dnf:
+    name: "{{ zabbix_repo_url_rhel8 }}"
+    state: present
+    disable_gpg_check: true
+  when: ansible_distribution_major_version == '8'
+
+- name: Install Zabbix agent packages (RHEL 8)
+  ansible.builtin.dnf:
+    name: "{{ zabbix_agent_packages }}"
+    state: present
+    disablerepo: "epel,epel-*"
+  register: zabbix_install_dnf8
+  ignore_errors: true
+  when: ansible_distribution_major_version == '8'
+
+- name: Retry Zabbix install without repo restrictions (RHEL 8)
+  ansible.builtin.dnf:
+    name: "{{ zabbix_agent_packages }}"
+    state: present
+    enablerepo: "zabbix"
+    disablerepo: "*"
+  when:
+    - ansible_distribution_major_version == '8'
+    - zabbix_install_dnf8.failed | default(false)
+
+# =============================================================================
+# RHEL/Rocky/Alma 9 - Use DNF + Zabbix 7.0
+# =============================================================================
+
+- name: Remove existing Zabbix packages (RHEL 9)
+  ansible.builtin.dnf:
+    name: "{{ item }}"
+    state: absent
+  loop: "{{ existing_zabbix.stdout_lines }}"
+  when:
+    - existing_zabbix.stdout | length > 0
+    - ansible_distribution_major_version == '9'
+
+- name: Clean DNF cache after removal (RHEL 9)
+  ansible.builtin.command: dnf clean all
+  when:
+    - existing_zabbix.stdout | length > 0
+    - ansible_distribution_major_version == '9'
+  changed_when: true
+
+- name: Add Zabbix 7.0 repository (RHEL 9)
+  ansible.builtin.dnf:
+    name: "{{ zabbix_repo_url_rhel9 }}"
+    state: present
+    disable_gpg_check: true
+  when: ansible_distribution_major_version == '9'
+
+- name: Install Zabbix agent packages (RHEL 9)
+  ansible.builtin.dnf:
+    name: "{{ zabbix_agent_packages }}"
+    state: present
+    disablerepo: "epel,epel-*"
+  register: zabbix_install_dnf9
+  ignore_errors: true
+  when: ansible_distribution_major_version == '9'
+
+- name: Retry Zabbix install without repo restrictions (RHEL 9)
+  ansible.builtin.dnf:
+    name: "{{ zabbix_agent_packages }}"
+    state: present
+    enablerepo: "zabbix"
+    disablerepo: "*"
+  when:
+    - ansible_distribution_major_version == '9'
+    - zabbix_install_dnf9.failed | default(false)

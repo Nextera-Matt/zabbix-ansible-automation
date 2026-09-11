@@ -1,0 +1,34 @@
+---
+# Playbook to edit host macros in Zabbix
+# API only - no server changes
+
+- hosts: localhost
+  connection: local
+  gather_facts: false
+  become: false
+  vars_files:
+    - ../config/passwords
+  vars:
+    zabbix_url: "https://zabbix-uk.vps.net"
+    zabbix_api_user: "support"
+    zabbix_api_pass: "{{ zabbix_password }}"
+  
+  tasks:
+    - name: "Update host macros in Zabbix"
+      community.zabbix.zabbix_host_macro:
+        server_url: "{{ zabbix_url }}"
+        login_user: "{{ zabbix_api_user }}"
+        login_password: "{{ zabbix_api_pass }}"
+        host_name: "{{ zabbix_agent_hostname }}"
+        macro_name: "{${{ macro_key }}}"
+        macro_value: "{{ macro_value }}"
+        state: present
+      tags:
+        - zabbix-agent
+        - api
+
+    - name: "Display update complete message"
+      ansible.builtin.debug:
+        msg: "Host '{{ zabbix_agent_hostname }}' macro '{{ macro_key }}' updated to '{{ macro_value }}'"
+      tags:
+        - always

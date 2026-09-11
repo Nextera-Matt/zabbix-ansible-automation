@@ -1,0 +1,32 @@
+---
+# Playbook to remove a host from Zabbix monitoring
+# API only - no server changes
+
+- hosts: localhost
+  connection: local
+  gather_facts: false
+  become: false
+  vars_files:
+    - ../config/passwords
+  vars:
+    zabbix_url: "https://zabbix-uk.vps.net"
+    zabbix_api_user: "support"
+    zabbix_api_pass: "{{ zabbix_password }}"
+  
+  tasks:
+    - name: "Remove host from Zabbix"
+      community.zabbix.zabbix_host:
+        server_url: "{{ zabbix_url }}"
+        login_user: "{{ zabbix_api_user }}"
+        login_password: "{{ zabbix_api_pass }}"
+        host_name: "{{ zabbix_agent_hostname }}"
+        state: absent
+      tags:
+        - zabbix-agent
+        - api
+
+    - name: "Display removal complete message"
+      ansible.builtin.debug:
+        msg: "Host '{{ zabbix_agent_hostname }}' has been removed from Zabbix monitoring"
+      tags:
+        - always

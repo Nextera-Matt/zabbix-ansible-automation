@@ -1,0 +1,51 @@
+---
+# Configure CSF to allow monitoring IPs and exclude zabbix agent from LFD
+
+- name: Allow Zabbix Proxy in CSF
+  shell: 'csf -a 109.123.125.234 [monitor-proxy.vps.net]'
+  changed_when: false
+
+- name: Allow SSH Proxy in CSF
+  shell: 'csf -a 83.170.66.7 [VPS.NET Support]'
+  changed_when: false
+
+- name: Allow Office IP in CSF
+  shell: 'csf -a 194.44.160.178 [VPS.NET Support]'
+  changed_when: false
+
+- name: Allow THG VPN London in CSF
+  shell: 'csf -a 37.130.227.132 [THG/ICS Support - LON VPN]'
+  changed_when: false
+
+- name: Allow THG VPN Salt Lake City in CSF
+  shell: 'csf -a 69.36.171.95 [THG/ICS Support - SLC VPN]'
+  changed_when: false
+
+- name: Locate zabbix_agentd binary path
+  command: which zabbix_agentd
+  register: zabbix_path
+  ignore_errors: true
+  changed_when: false
+
+- name: Exclude zabbix binary from LFD by exe
+  lineinfile:
+    path: /etc/csf/csf.pignore
+    line: "exe:{{ zabbix_path.stdout }}"
+    create: yes
+  when: zabbix_path.stdout != ""
+
+- name: Exclude zabbix binary from LFD by cmd
+  lineinfile:
+    path: /etc/csf/csf.pignore
+    line: "cmd:{{ zabbix_path.stdout }}"
+    create: yes
+  when: zabbix_path.stdout != ""
+
+- name: Exclude zabbix user from LFD
+  lineinfile:
+    path: /etc/csf/csf.pignore
+    line: "user:zabbix"
+    create: yes
+
+- name: Reload CSF and LFD
+  command: csf -ra

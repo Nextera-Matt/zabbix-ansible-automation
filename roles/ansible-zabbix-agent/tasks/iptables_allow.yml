@@ -1,0 +1,78 @@
+---
+# iptables rules for Zabbix agent and SSH access
+
+- name: Allow Zabbix Proxy access on port 10050/tcp
+  ansible.builtin.iptables:
+    chain: INPUT
+    source: 109.123.125.234
+    protocol: tcp
+    destination_port: 10050
+    jump: ACCEPT
+    comment: "Zabbix Proxy monitor-proxy.vps.net"
+    state: present
+
+- name: Allow SSH Proxy IP on port 22
+  ansible.builtin.iptables:
+    chain: INPUT
+    source: 83.170.66.7
+    protocol: tcp
+    destination_port: 22
+    jump: ACCEPT
+    comment: "VPS.NET Support"
+    state: present
+
+- name: Allow Office IP on port 22
+  ansible.builtin.iptables:
+    chain: INPUT
+    source: 194.44.160.178
+    protocol: tcp
+    destination_port: 22
+    jump: ACCEPT
+    comment: "VPS.NET Support"
+    state: present
+
+- name: Allow THG VPN London on port 22
+  ansible.builtin.iptables:
+    chain: INPUT
+    source: 37.130.227.132
+    protocol: tcp
+    destination_port: 22
+    jump: ACCEPT
+    comment: "THG/ICS Support - LON VPN"
+    state: present
+
+- name: Allow THG VPN Salt Lake City on port 22
+  ansible.builtin.iptables:
+    chain: INPUT
+    source: 69.36.171.95
+    protocol: tcp
+    destination_port: 22
+    jump: ACCEPT
+    comment: "THG/ICS Support - SLC VPN"
+    state: present
+
+# Save iptables rules - handle both old (RHEL 7) and new (RHEL 8/9) methods
+- name: Check if iptables-services is available (RHEL 7 style)
+  ansible.builtin.stat:
+    path: /etc/init.d/iptables
+  register: iptables_initd
+
+- name: Save iptables rules (RHEL 7 / CentOS 7)
+  ansible.builtin.command: service iptables save
+  when:
+    - ansible_os_family == "RedHat"
+    - iptables_initd.stat.exists
+  changed_when: true
+
+- name: Save iptables rules (RHEL 8/9 / Rocky / Alma)
+  ansible.builtin.shell: iptables-save > /etc/sysconfig/iptables
+  when:
+    - ansible_os_family == "RedHat"
+    - not iptables_initd.stat.exists
+  changed_when: true
+
+- name: Save iptables rules (Debian/Ubuntu)
+  ansible.builtin.shell: iptables-save > /etc/iptables/rules.v4
+  when: ansible_os_family == "Debian"
+  failed_when: false
+  changed_when: true

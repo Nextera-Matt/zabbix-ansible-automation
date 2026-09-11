@@ -1,0 +1,58 @@
+---
+# Playbook to uninstall Zabbix agent from a server
+# Requires SSH access to the target server
+
+- hosts: all
+  gather_facts: true
+  become: true
+  
+  tasks:
+    - name: "Stop zabbix-agent service"
+      ansible.builtin.service:
+        name: zabbix-agent
+        state: stopped
+        enabled: false
+      ignore_errors: true
+      tags:
+        - uninstall
+
+    - name: "Uninstall Zabbix agent (RHEL/CentOS/Rocky/Alma)"
+      ansible.builtin.yum:
+        name:
+          - zabbix-agent
+          - zabbix-agent2
+          - zabbix-sender
+          - zabbix-get
+        state: absent
+      when: ansible_os_family == "RedHat"
+      ignore_errors: true
+      tags:
+        - uninstall
+    
+    - name: "Uninstall Zabbix agent (Debian/Ubuntu)"
+      ansible.builtin.apt:
+        name:
+          - zabbix-agent
+          - zabbix-agent2
+          - zabbix-sender
+          - zabbix-get
+        state: absent
+        purge: true
+      when: ansible_os_family == "Debian"
+      ignore_errors: true
+      tags:
+        - uninstall
+    
+    - name: "Remove Zabbix configuration directory"
+      ansible.builtin.file:
+        path: /etc/zabbix
+        state: absent
+      ignore_errors: true
+      tags:
+        - uninstall
+
+    - name: "Display uninstall complete message"
+      ansible.builtin.debug:
+        msg: "Zabbix agent has been uninstalled from {{ inventory_hostname }}"
+      tags:
+        - always

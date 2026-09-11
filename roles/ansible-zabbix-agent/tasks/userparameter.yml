@@ -1,0 +1,20 @@
+---
+# roles/zabbix_agent/tasks/userparameter.yml
+
+- name: Ensure userparameter directory exists
+  file:
+    path: /etc/zabbix/zabbix_agentd.d
+    state: directory
+    mode: '0755'
+
+- name: Deploy custom userparameter config for MySQL
+  template:
+    src: userparameters/mysql.j2
+    dest: /etc/zabbix/zabbix_agentd.d/userparameter_mysql.conf
+    owner: root
+    group: root
+    mode: '0644'
+  notify: Restart Zabbix agent
+
+# Add more userparameter templates as needed here
+

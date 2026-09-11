@@ -1,0 +1,42 @@
+---
+# Modernised Ansible Playbook for Zabbix Agent Deployment
+
+- name: Deploy and configure Zabbix agent
+  hosts: all
+  gather_facts: yes
+  become: yes
+
+  vars_files:
+    - ../config/passwords
+
+  vars:
+    zabbix_url: "https://zabbix-uk.vps.net"
+    zabbix_api_user: "support"
+    zabbix_api_pass: "{{ zabbix_password }}"
+    zabbix_agent_hostname: "{{ inventory_hostname }}"
+    zabbix_host_groups:
+      - L3-MONITORING_SUPPORT
+    zabbix_link_templates:
+      - Template Ultimate Support
+    zabbix_host_status: enabled
+    zabbix_create_host: present
+    zabbix_proxy: monitor-proxy.vps.net
+    zabbix_agent_server: monitor-proxy.vps.net
+    zabbix_agent_serveractive: monitor-proxy.vps.net
+    zabbix_api_create_hosts: true
+    zabbix_agent_listenport: 10050
+    zabbix_agent_interfaces:
+      - type: 1
+        main: 1
+        useip: 1
+        ip: "{{ zabbix_agent_ip }}"
+        dns: "{{ inventory_hostname }}"
+        port: "{{ zabbix_agent_listenport }}"
+    zabbix_macros:
+      - macro_key: SSH_PORT
+        macro_value: "{{ ansible_port }}"
+      - macro_key: OWNER_EMAIL
+        macro_value: "{{ owner_email }}"
+
+  roles:
+    - role: ansible-zabbix-agent

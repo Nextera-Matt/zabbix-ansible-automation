@@ -1,0 +1,46 @@
+---
+# Firewalld rules for Zabbix agent and SSH access
+
+- name: Allow Zabbix Proxy port 10050/tcp in firewalld
+  firewalld:
+    source: 109.123.125.234
+    port: 10050/tcp
+    permanent: true
+    state: enabled
+    immediate: yes
+
+- name: Allow SSH Proxy IP in firewalld
+  firewalld:
+    source: 83.170.66.7
+    port: 22/tcp
+    permanent: true
+    state: enabled
+    immediate: yes
+
+- name: Allow Office IP in firewalld
+  firewalld:
+    source: 194.44.160.178
+    port: 22/tcp
+    permanent: true
+    state: enabled
+    immediate: yes
+
+- name: Allow THG VPN London in firewalld
+  firewalld:
+    source: 37.130.227.132
+    port: 22/tcp
+    permanent: true
+    state: enabled
+    immediate: yes
+
+- name: Allow THG VPN Salt Lake City in firewalld
+  firewalld:
+    source: 69.36.171.95
+    port: 22/tcp
+    permanent: true
+    state: enabled
+    immediate: yes
+
+- name: Reload firewalld to apply changes
+  firewalld:
+    state: reloaded

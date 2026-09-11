@@ -1,0 +1,148 @@
+---
+# Playbook to fix firewall rules for Zabbix agent connectivity
+# Adds rules to allow Zabbix proxy to connect on port 10050
+
+- hosts: all
+  gather_facts: true
+  become: true
+  vars:
+    zabbix_proxy_ip: "109.123.125.234"
+    zabbix_proxy_hostname: "monitor-proxy.vps.net"
+    zabbix_agent_port: 10050
+  
+  tasks:
+    # ==========================================================================
+    # DETECT FIREWALL
+    # ==========================================================================
+    
+    - name: Check if CSF is installed
+      ansible.builtin.stat:
+        path: /etc/csf/csf.conf
+      register: csf_installed
+
+    - name: Check if iptables is available
+      ansible.builtin.command: which iptables
+      register: iptables_available
+      ignore_errors: true
+      changed_when: false
+
+    - name: Check if firewalld is running
+      ansible.builtin.systemd:
+        name: firewalld
+      register: firewalld_status
+      ignore_errors: true
+
+    - name: Check if UFW is available
+      ansible.builtin.command: which ufw
+      register: ufw_available
+      ignore_errors: true
+      changed_when: false
+
+    # ==========================================================================
+    # CSF FIREWALL
+    # ==========================================================================
+    
+    - name: "Add Zabbix proxy to CSF allow list"
+      ansible.builtin.lineinfile:
+        path: /etc/csf/csf.allow
+        line: "tcp|in|d={{ zabbix_agent_port }}|s={{ zabbix_proxy_ip }} # Zabbix Proxy {{ zabbix_proxy_hostname }}"
+        state: present
+      when: csf_installed.stat.exists
+      register: csf_changed
+
+    - name: "Restart CSF"
+      ansible.builtin.command: csf -r
+      when: 
+        - csf_installed.stat.exists
+        - csf_changed.changed
+
+    # ==========================================================================
+    # IPTABLES (when firewalld is not running)
+    # ==========================================================================
+    
+    - name: "Add iptables rule for Zabbix proxy"
+      ansible.builtin.iptables:
+        chain: INPUT
+        protocol: tcp
+        source: "{{ zabbix_proxy_ip }}"
+        destination_port: "{{ zabbix_agent_port }}"
+        jump: ACCEPT
+        comment: "Zabbix Proxy {{ zabbix_proxy_hostname }}"
+      when: 
+        - iptables_available.rc == 0
+        - not csf_installed.stat.exists
+        - (firewalld_status.status.ActiveState is not defined or firewalld_status.status.ActiveState != 'active')
+      register: iptables_changed
+
+    - name: "Save iptables rules (RHEL 8/9)"
+      ansible.builtin.shell: iptables-save > /etc/sysconfig/iptables
+      when:
+        - iptables_changed.changed | default(false)
+        - ansible_os_family == "RedHat"
+        - ansible_distribution_major_version | int >= 8
+
+    - name: "Save iptables rules (RHEL 7)"
+      ansible.builtin.command: service iptables save
+      when:
+        - iptables_changed.changed | default(false)
+        - ansible_os_family == "RedHat"
+        - ansible_distribution_major_version | int < 8
+
+    - name: "Save iptables rules (Debian/Ubuntu)"
+      ansible.builtin.shell: iptables-save > /etc/iptables/rules.v4
+      when:
+        - iptables_changed.changed | default(false)
+        - ansible_os_family == "Debian"
+
+    # ==========================================================================
+    # FIREWALLD
+    # ==========================================================================
+    
+    - name: "Add firewalld rule for Zabbix proxy"
+      ansible.posix.firewalld:
+        rich_rule: 'rule family="ipv4" source address="{{ zabbix_proxy_ip }}" port port="{{ zabbix_agent_port }}" protocol="tcp" accept'
+        permanent: true
+        immediate: true
+        state: enabled
+      when: 
+        - firewalld_status.status.ActiveState is defined
+        - firewalld_status.status.ActiveState == 'active'
+        - not csf_installed.stat.exists
+
+    # ==========================================================================
+    # UFW (Ubuntu)
+    # ==========================================================================
+    
+    - name: "Add UFW rule for Zabbix proxy"
+      community.general.ufw:
+        rule: allow
+        from_ip: "{{ zabbix_proxy_ip }}"
+        to_port: "{{ zabbix_agent_port }}"
+        proto: tcp
+        comment: "Zabbix Proxy {{ zabbix_proxy_hostname }}"
+      when:
+        - ufw_available.rc is defined
+        - ufw_available.rc == 0
+        - ansible_os_family == "Debian"
+        - not csf_installed.stat.exists
+        - (firewalld_status.status.ActiveState is not defined or firewalld_status.status.ActiveState != 'active')
+
+    # ==========================================================================
+    # VERIFICATION
+    # ==========================================================================
+    
+    - name: "Verify Zabbix agent is listening on port {{ zabbix_agent_port }}"
+      ansible.builtin.wait_for:
+        port: "{{ zabbix_agent_port }}"
+        host: 127.0.0.1
+        timeout: 5
+      ignore_errors: true
+      register: agent_listening
+
+    - name: "Display agent status"
+      ansible.builtin.debug:
+        msg: "{{ 'Zabbix agent is listening on port ' + zabbix_agent_port|string if agent_listening is succeeded else 'WARNING: Zabbix agent is NOT listening on port ' + zabbix_agent_port|string + ' - agent may not be installed' }}"
+
+    - name: "Display completion message"
+      ansible.builtin.debug:
+        msg: "Firewall rules updated on {{ inventory_hostname }}. Zabbix proxy {{ zabbix_proxy_ip }} can now connect on port {{ zabbix_agent_port }}."

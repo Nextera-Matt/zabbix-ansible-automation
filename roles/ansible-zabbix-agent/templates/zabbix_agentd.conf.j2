@@ -1,0 +1,11 @@
+PidFile=/var/run/zabbix/zabbix_agentd.pid
+LogFile=/var/log/zabbix/zabbix_agentd.log
+LogFileSize=100
+EnableRemoteCommands=0
+LogRemoteCommands=0
+Server={{ zabbix_agent_server }}
+ServerActive={{ zabbix_agent_serveractive }}
+Hostname={{ zabbix_agent_hostname }}
+Timeout=3
+Include=/etc/zabbix/zabbix_agentd.d/
+

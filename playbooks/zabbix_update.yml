@@ -1,0 +1,42 @@
+---
+# Playbook to update a host's group and template in Zabbix
+# This does NOT touch the server - API only
+
+- hosts: localhost
+  connection: local
+  gather_facts: false
+  become: false
+  vars_files:
+    - ../config/passwords
+  vars:
+    zabbix_url: "https://zabbix-uk.vps.net"
+    zabbix_api_user: "support"
+    zabbix_api_pass: "{{ zabbix_password }}"
+    # These will be passed via -e on command line
+    zabbix_agent_hostname: "{{ zabbix_agent_hostname }}"
+    new_host_groups: "{{ new_host_groups }}"
+    new_link_templates: "{{ new_link_templates }}"
+    new_hostname: "{{ new_hostname }}"
+  
+  tasks:
+    - name: "Update host group and template in Zabbix"
+      community.zabbix.zabbix_host:
+        server_url: "{{ zabbix_url }}"
+        login_user: "{{ zabbix_api_user }}"
+        login_password: "{{ zabbix_api_pass }}"
+        host_name: "{{ zabbix_agent_hostname }}"
+        visible_name: "{{ new_hostname }}"
+        host_groups:
+          - "{{ new_host_groups }}"
+        link_templates:
+          - "{{ new_link_templates }}"
+        state: present
+      tags:
+        - zabbix-agent
+        - api
+
+    - name: "Display update complete message"
+      ansible.builtin.debug:
+        msg: "Host '{{ zabbix_agent_hostname }}' updated to group '{{ new_host_groups }}' with template '{{ new_link_templates }}'. New hostname: '{{ new_hostname }}'"
+      tags:
+        - always

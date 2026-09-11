@@ -1,0 +1,47 @@
+---
+# roles/ansible-zabbix-agent/tasks/Debian.yml
+# Installation tasks for Debian and Ubuntu
+
+- name: Check for existing Zabbix packages
+  ansible.builtin.shell: dpkg -l | grep -i zabbix | awk '{print $2}' || true
+  register: existing_zabbix
+  changed_when: false
+
+- name: Display existing Zabbix packages (if any)
+  ansible.builtin.debug:
+    msg: "Found existing Zabbix packages: {{ existing_zabbix.stdout_lines }}"
+  when: existing_zabbix.stdout | length > 0
+
+- name: Remove existing Zabbix packages to prevent conflicts
+  ansible.builtin.apt:
+    name: "{{ item }}"
+    state: absent
+    purge: true
+  loop: "{{ existing_zabbix.stdout_lines }}"
+  when: existing_zabbix.stdout | length > 0
+
+- name: Clean apt cache after removal
+  ansible.builtin.apt:
+    autoclean: true
+    autoremove: true
+  when: existing_zabbix.stdout | length > 0
+
+- name: Install Zabbix repository key
+  ansible.builtin.apt_key:
+    url: "{{ zabbix_repo_key_url }}"
+    state: present
+
+- name: Add Zabbix repository
+  ansible.builtin.apt_repository:
+    repo: "{{ zabbix_repo }}"
+    state: present
+    filename: zabbix
+
+- name: Update apt cache
+  ansible.builtin.apt:
+    update_cache: true
+
+- name: Install Zabbix agent packages
+  ansible.builtin.apt:
+    name: "{{ zabbix_agent_packages }}"
+    state: present

@@ -1,0 +1,33 @@
+---
+- name: Ensure Zabbix Agent download directory exists
+  win_file:
+    path: C:\zabbix
+    state: directory
+
+- name: Download Zabbix Agent MSI
+  win_get_url:
+    url: "https://cdn.zabbix.com/zabbix/binaries/stable/{{ zabbix_version }}/{{ zabbix_version }}.0/zabbix_agent-{{ zabbix_version }}.0-windows-amd64-openssl.msi"
+    dest: "C:\\zabbix\\zabbix_agent.msi"
+
+- name: Install Zabbix Agent
+  win_package:
+    path: "C:\\zabbix\\zabbix_agent.msi"
+    product_id: Zabbix Agent
+    state: present
+
+- name: Configure Zabbix agent (basic setup)
+  win_lineinfile:
+    path: 'C:\Program Files\Zabbix Agent\zabbix_agentd.conf'
+    regexp: '^{{ item.key }}='
+    line: '{{ item.key }}={{ item.value }}'
+  loop:
+    - { key: 'Server', value: '{{ zabbix_agent_server }}' }
+    - { key: 'ServerActive', value: '{{ zabbix_agent_serveractive }}' }
+    - { key: 'Hostname', value: '{{ zabbix_agent_hostname }}' }
+
+- name: Restart Zabbix Agent service
+  win_service:
+    name: "Zabbix Agent"
+    state: restarted
+    start_mode: auto
+

@@ -1,0 +1,27 @@
+---
+# nftables rules for Zabbix agent and SSH access
+
+- name: Add nftables rule for Zabbix Proxy on port 10050/tcp
+  ansible.builtin.command: >
+    nft add rule inet filter input ip saddr 109.123.125.234 tcp dport 10050 accept
+  ignore_errors: true
+
+- name: Add nftables rule for SSH Proxy IP
+  ansible.builtin.command: >
+    nft add rule inet filter input ip saddr 83.170.66.7 tcp dport 22 accept
+  ignore_errors: true
+
+- name: Add nftables rule for Office IP
+  ansible.builtin.command: >
+    nft add rule inet filter input ip saddr 194.44.160.178 tcp dport 22 accept
+  ignore_errors: true
+
+- name: Add nftables rule for THG VPN London
+  ansible.builtin.command: >
+    nft add rule inet filter input ip saddr 37.130.227.132 tcp dport 22 accept
+  ignore_errors: true
+
+- name: Add nftables rule for THG VPN Salt Lake City
+  ansible.builtin.command: >
+    nft add rule inet filter input ip saddr 69.36.171.95 tcp dport 22 accept
+  ignore_errors: true

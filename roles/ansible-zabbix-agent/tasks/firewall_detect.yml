@@ -1,0 +1,128 @@
+---
+# roles/ansible-zabbix-agent/tasks/firewall_detect.yml
+# Detects which firewall is active and sets detected_firewall variable
+#
+# Priority order:
+#   1. CSF (ConfigServer Firewall)
+#   2. iptables
+#   3. nftables
+#   4. firewalld
+#   5. UFW
+
+# =============================================================================
+# 1. CSF (highest priority)
+# =============================================================================
+
+- name: "Check if CSF is installed"
+  ansible.builtin.stat:
+    path: /usr/sbin/csf
+  register: csf_installed
+  tags: firewall
+
+- name: "Check if CSF is enabled (not disabled)"
+  ansible.builtin.shell: csf -l
+  register: csf_status
+  changed_when: false
+  failed_when: false
+  when: csf_installed.stat.exists
+  tags: firewall
+
+- name: "Set CSF as detected firewall"
+  ansible.builtin.set_fact:
+    detected_firewall: "csf"
+  when:
+    - csf_installed.stat.exists
+    - "'csf and lfd have been disabled' not in csf_status.stdout | default('')"
+  tags: firewall
+
+# =============================================================================
+# 2. iptables (second priority)
+# =============================================================================
+
+- name: "Check if iptables is installed"
+  ansible.builtin.command: which iptables
+  register: iptables_check
+  changed_when: false
+  failed_when: false
+  when: detected_firewall is not defined
+  tags: firewall
+
+- name: "Set iptables as detected firewall"
+  ansible.builtin.set_fact:
+    detected_firewall: "iptables"
+  when:
+    - detected_firewall is not defined
+    - iptables_check.rc | default(1) == 0
+  tags: firewall
+
+# =============================================================================
+# 3. nftables (third priority)
+# =============================================================================
+
+- name: "Check if nftables is installed"
+  ansible.builtin.command: which nft
+  register: nftables_check
+  changed_when: false
+  failed_when: false
+  when: detected_firewall is not defined
+  tags: firewall
+
+- name: "Set nftables as detected firewall"
+  ansible.builtin.set_fact:
+    detected_firewall: "nftables"
+  when:
+    - detected_firewall is not defined
+    - nftables_check.rc | default(1) == 0
+  tags: firewall
+
+# =============================================================================
+# 4. firewalld (fourth priority - OOB on RHEL/Rocky/Alma)
+# =============================================================================
+
+- name: "Gather service facts"
+  ansible.builtin.service_facts:
+  when: detected_firewall is not defined
+  tags: firewall
+
+- name: "Set firewalld as detected firewall"
+  ansible.builtin.set_fact:
+    detected_firewall: "firewalld"
+  when:
+    - detected_firewall is not defined
+    - "'firewalld.service' in ansible_facts.services or 'firewalld' in ansible_facts.services"
+    - ansible_facts.services['firewalld.service'].state | default(ansible_facts.services['firewalld'].state) | default('') == 'running'
+  tags: firewall
+
+# =============================================================================
+# 5. UFW (fifth priority - OOB on Ubuntu)
+# =============================================================================
+
+- name: "Set UFW as detected firewall"
+  ansible.builtin.set_fact:
+    detected_firewall: "ufw"
+  when:
+    - detected_firewall is not defined
+    - "'ufw.service' in ansible_facts.services or 'ufw' in ansible_facts.services"
+    - ansible_facts.services['ufw.service'].state | default(ansible_facts.services['ufw'].state) | default('') == 'running'
+  tags: firewall
+
+# =============================================================================
+# No firewall detected
+# =============================================================================
+
+- name: "Set no firewall detected"
+  ansible.builtin.set_fact:
+    detected_firewall: "none"
+  when: detected_firewall is not defined
+  tags: firewall
+
+- name: "Display detected firewall"
+  ansible.builtin.debug:
+    msg: "Detected firewall: {{ detected_firewall }}"
+  tags: firewall
+
+- name: "Fail if no supported firewall found"
+  ansible.builtin.fail:
+    msg: "No supported firewall (CSF, iptables, nftables, firewalld, UFW) detected. Manual configuration required."
+  when: detected_firewall == 'none'
+  tags: firewall

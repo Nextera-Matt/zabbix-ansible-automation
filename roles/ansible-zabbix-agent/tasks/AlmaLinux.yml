@@ -1,0 +1,26 @@
+---
+- name: Add Zabbix repository for AlmaLinux
+  yum_repository:
+    name: zabbix
+    description: Zabbix Official Repository
+    baseurl: "https://repo.zabbix.com/zabbix/{{ zabbix_version }}/rhel/{{ ansible_distribution_major_version }}/$basearch/"
+    gpgcheck: no
+    state: present
+
+- name: Install Zabbix agent packages
+  package:
+    name:
+      - zabbix-agent
+      - zabbix-sender
+      - zabbix-get
+    state: "{{ zabbix_agent_package_state }}"
+
+- name: Configure Zabbix agent using template
+  template:
+    src: zabbix_agentd.conf.j2
+    dest: /etc/zabbix/zabbix_agentd.conf
+    owner: root
+    group: root
+    mode: '0644'
+  notify: Restart Zabbix agent
+

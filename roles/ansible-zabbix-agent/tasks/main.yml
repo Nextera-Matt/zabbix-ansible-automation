@@ -1,0 +1,199 @@
+---
+# roles/ansible-zabbix-agent/tasks/main.yml
+# Complete modernised version with full functionality
+
+# =============================================================================
+# OS DETECTION AND FACT SETUP
+# =============================================================================
+
+- name: "Fix facts for Ubuntu"
+  ansible.builtin.set_fact:
+    zabbix_agent_os_family: Debian
+    zabbix_agent_distribution_release: "{{ ansible_distribution_release }}"
+  when:
+    - ansible_distribution == 'Ubuntu'
+    - ansible_distribution_release in ['bionic', 'focal', 'jammy', 'noble']
+
+- name: "Fix facts for Debian"
+  ansible.builtin.set_fact:
+    zabbix_agent_os_family: Debian
+    zabbix_agent_distribution_release: "{{ ansible_distribution_release }}"
+  when:
+    - ansible_distribution == 'Debian'
+    - ansible_distribution_release in ['buster', 'bullseye', 'bookworm']
+
+- name: "Fix facts for RedHat family (RHEL, CentOS, AlmaLinux, Rocky)"
+  ansible.builtin.set_fact:
+    zabbix_agent_os_family: RedHat
+  when:
+    - ansible_distribution in ['RedHat', 'CentOS', 'AlmaLinux', 'Rocky']
+    - ansible_distribution_major_version in ['7', '8', '9']
+
+- name: "Fix facts for SUSE"
+  ansible.builtin.set_fact:
+    zabbix_agent_os_family: Suse
+  when:
+    - ansible_os_family == 'Suse'
+
+# =============================================================================
+# LOAD OS-SPECIFIC VARIABLES (from vars/ directory)
+# =============================================================================
+
+- name: "Include OS-specific variables"
+  ansible.builtin.include_vars: "{{ role_path }}/vars/{{ zabbix_agent_os_family }}.yml"
+  when: zabbix_agent_os_family is defined
+  tags:
+    - always
+
+# =============================================================================
+# INSTALL ZABBIX AGENT (OS-SPECIFIC)
+# =============================================================================
+
+- name: "Include OS-specific installation tasks"
+  ansible.builtin.include_tasks: "{{ zabbix_agent_os_family }}.yml"
+  when:
+    - zabbix_agent_os_family is defined
+    - not (zabbix_agent_docker | default(false) | bool)
+  tags:
+    - zabbix-agent
+    - install
+
+# =============================================================================
+# SET DEFAULT IP ADDRESS
+# =============================================================================
+
+- name: "Set default IP address for zabbix_agent_ip"
+  ansible.builtin.set_fact:
+    zabbix_agent_ip: "{{ hostvars[inventory_hostname]['ansible_default_ipv4'].address }}"
+  when:
+    - zabbix_agent_ip is not defined
+    - "'ansible_default_ipv4' in hostvars[inventory_hostname]"
+
+# =============================================================================
+# CONFIGURE ZABBIX AGENT
+# =============================================================================
+
+- name: "Configure zabbix-agent"
+  ansible.builtin.template:
+    src: zabbix_agentd.conf.j2
+    dest: "/etc/zabbix/{{ zabbix_agent_conf | default('zabbix_agentd.conf') }}"
+    owner: root
+    group: root
+    mode: '0644'
+  notify:
+    - Restart Zabbix agent
+  become: true
+  tags:
+    - zabbix-agent
+    - config
+
+# =============================================================================
+# ENSURE SERVICE IS RUNNING
+# =============================================================================
+
+- name: "Ensure zabbix-agent is enabled and running"
+  ansible.builtin.service:
+    name: "{{ zabbix_agent_service | default('zabbix-agent') }}"
+    state: started
+    enabled: true
+  become: true
+  tags:
+    - zabbix-agent
+    - service
+
+# =============================================================================
+# SSH KEY DEPLOYMENT
+# =============================================================================
+
+- name: "Deploy authorized SSH key for root"
+  ansible.posix.authorized_key:
+    user: root
+    state: present
+    key: "{{ lookup('file', '/home/L3/zabbix_ansible_modernised/id_rsa_managed.pub') }}"
+  become: true
+  tags:
+    - zabbix-agent
+    - ssh
+
+# =============================================================================
+# FIREWALL CONFIGURATION
+# =============================================================================
+
+- name: "Include firewall detection tasks"
+  ansible.builtin.include_tasks: firewall_detect.yml
+  tags:
+    - zabbix-agent
+    - firewall
+
+- name: "Include firewall allow tasks"
+  ansible.builtin.include_tasks: "{{ detected_firewall }}_allow.yml"
+  when:
+    - detected_firewall is defined
+    - detected_firewall != ''
+    - detected_firewall != 'none'
+  tags:
+    - zabbix-agent
+    - firewall
+
+# =============================================================================
+# ZABBIX API - HOST REGISTRATION
+# =============================================================================
+
+- name: "Create hostgroups via Zabbix API"
+  delegate_to: localhost
+  community.zabbix.zabbix_group:
+    server_url: "{{ zabbix_url }}"
+    login_user: "{{ zabbix_api_user }}"
+    login_password: "{{ zabbix_api_pass }}"
+    host_groups:
+      - "{{ zabbix_host_groups }}"
+    state: "{{ zabbix_create_hostgroup | default('present') }}"
+  when:
+    - zabbix_api_create_hostgroup | default(true) | bool
+  run_once: true
+  become: false
+  tags:
+    - zabbix-agent
+    - api
+
+- name: "Create or update host in Zabbix"
+  delegate_to: localhost
+  community.zabbix.zabbix_host:
+    server_url: "{{ zabbix_url }}"
+    login_user: "{{ zabbix_api_user }}"
+    login_password: "{{ zabbix_api_pass }}"
+    host_name: "{{ zabbix_agent_hostname }}"
+    visible_name: "{{ zabbix_agent_hostname }}"
+    host_groups:
+      - "{{ zabbix_host_groups }}"
+    link_templates:
+      - "{{ zabbix_link_templates }}"
+    status: "{{ zabbix_host_status | default('enabled') }}"
+    state: "{{ zabbix_create_host | default('present') }}"
+    proxy: "{{ zabbix_proxy }}"
+    interfaces: "{{ zabbix_agent_interfaces }}"
+    force: true
+  when:
+    - zabbix_api_create_hosts | default(true) | bool
+  become: false
+  tags:
+    - zabbix-agent
+    - api
+
+- name: "Configure host macros in Zabbix"
+  delegate_to: localhost
+  community.zabbix.zabbix_hostmacro:
+    server_url: "{{ zabbix_url }}"
+    login_user: "{{ zabbix_api_user }}"
+    login_password: "{{ zabbix_api_pass }}"
+    host_name: "{{ zabbix_agent_hostname }}"
+    macro_name: "{{ item.macro_key }}"
+    macro_value: "{{ item.macro_value }}"
+  loop: "{{ zabbix_macros | default([]) }}"
+  when:
+    - zabbix_macros is defined
+    - zabbix_macros | length > 0
+  become: false
+  tags:
+    - zabbix-agent
+    - api

@@ -1,0 +1,42 @@
+---
+# UFW firewall rules for Zabbix agent and SSH access
+
+- name: Allow Zabbix Proxy on port 10050/tcp in UFW
+  community.general.ufw:
+    rule: allow
+    from_ip: 109.123.125.234
+    port: '10050'
+    proto: tcp
+    comment: "Zabbix Proxy monitor-proxy.vps.net"
+
+- name: Allow SSH Proxy IP on port 22 in UFW
+  community.general.ufw:
+    rule: allow
+    from_ip: 83.170.66.7
+    port: '22'
+    proto: tcp
+    comment: "VPS.NET Support"
+
+- name: Allow Office IP on port 22 in UFW
+  community.general.ufw:
+    rule: allow
+    from_ip: 194.44.160.178
+    port: '22'
+    proto: tcp
+    comment: "VPS.NET Support"
+
+- name: Allow THG VPN London on port 22 in UFW
+  community.general.ufw:
+    rule: allow
+    from_ip: 37.130.227.132
+    port: '22'
+    proto: tcp
+    comment: "THG/ICS Support - LON VPN"
+
+- name: Allow THG VPN Salt Lake City on port 22 in UFW
+  community.general.ufw:
+    rule: allow
+    from_ip: 69.36.171.95
+    port: '22'
+    proto: tcp
+    comment: "THG/ICS Support - SLC VPN"

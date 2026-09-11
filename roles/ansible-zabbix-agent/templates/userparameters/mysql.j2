@@ -1,0 +1,14 @@
+UserParameter=mysql.ping,mysqladmin ping -uroot | grep -c alive
+UserParameter=mysql.version,mysql -V
+UserParameter=mysql.uptime,mysqladmin status | cut -f2 -d":" | cut -f1 -d"T"
+UserParameter=mysql.threads,mysqladmin status | cut -f3 -d":" | cut -f1 -d"Q"
+UserParameter=mysql.questions,mysqladmin status | cut -f4 -d":" | cut -f1 -d"S"
+UserParameter=mysql.slow_queries,mysqladmin status | cut -f5 -d":" | cut -f1 -d"O"
+UserParameter=mysql.opened_tables,mysqladmin status | cut -f6 -d":" | cut -f1 -d"F"
+UserParameter=mysql.open_tables,mysqladmin status | cut -f7 -d":" | cut -f1 -d"A"
+UserParameter=mysql.qcache_hits,mysqladmin status | cut -f8 -d":" | cut -f1 -d"N"
+UserParameter=mysql.com_select,mysqladmin extended-status | grep -w "Com_select" | awk '{print $$4}'
+UserParameter=mysql.com_insert,mysqladmin extended-status | grep -w "Com_insert" | awk '{print $$4}'
+UserParameter=mysql.com_update,mysqladmin extended-status | grep -w "Com_update" | awk '{print $$4}'
+UserParameter=mysql.com_delete,mysqladmin extended-status | grep -w "Com_delete" | awk '{print $$4}'
+
